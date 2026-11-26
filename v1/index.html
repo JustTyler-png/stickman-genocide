@@ -5,46 +5,48 @@
 		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
 		<title>stickman-genocide</title>
 		<style>
-	#mobile-controls {
-	    position: fixed;
-	    bottom: 20px;
-	    left: 0;
-	    width: 100%;
-	    display: flex;
-	    justify-content: space-between;
-	    padding: 0 25px;
-	    box-sizing: border-box;
-	    pointer-events: none; /* Lets touches pass through empty areas to the game */
-	    z-index: 9999;
-	    user-select: none;
-	    -webkit-user-select: none;
-	}
+ #mobile-controls {
+    position: fixed;
+    bottom: 25px;
+    left: 25px;
+    z-index: 9999;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+  }
 
-	.control-group {
-		display: flex;
-		gap: 15px;
-		pointer-events: auto;
-	}
+  .dpad-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 60px);
+    grid-template-rows: repeat(2, 60px);
+    gap: 8px;
+  }
 
-	.touch-btn {
-		width: 65px;
-	    height: 65px;
-	    border-radius: 50%;
-	    background: rgba(255, 255, 255, 0.25);
-	    border: 2px solid rgba(255, 255, 255, 0.6);
-	    color: white;
-	    font-family: sans-serif;
-	    font-size: 20px;
-	    font-weight: bold;
-	    display: flex;
-	    align-items: center;
-	    justify-content: center;
-	    touch-action: none; /* Prevents browser zooming/scrolling on tap */
-	}
+  .touch-btn {
+    width: 60px;
+    height: 60px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.25);
+    border: 2px solid rgba(255, 255, 255, 0.6);
+    color: white;
+    font-family: sans-serif;
+    font-size: 22px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+  }
 
-  	.touch-btn:active {
-    	background: rgba(255, 255, 255, 0.5);
-  	}
+  .touch-btn.pressed {
+    background: rgba(255, 255, 255, 0.55);
+  }
+
+  /* Grid placement for WASD layout */
+  .btn-w { grid-column: 2; grid-row: 1; }
+  .btn-a { grid-column: 1; grid-row: 2; }
+  .btn-s { grid-column: 2; grid-row: 2; }
+  .btn-d { grid-column: 3; grid-row: 2; }
 html, body, #canvas {
 	margin: 0;
 	padding: 0;
@@ -136,54 +138,57 @@ body {
 	</head>
 	<body>
 		<div id="mobile-controls">
-  <!-- Left / Right Movement -->
-  <div class="control-group">
-    <div class="touch-btn" data-key="ArrowLeft" data-code="ArrowLeft">◀</div>
-    <div class="touch-btn" data-key="ArrowRight" data-code="ArrowRight">▶</div>
-  </div>
-
-  <!-- Action / Jump Buttons -->
-  <div class="control-group">
-    <div class="touch-btn" data-key=" " data-code="Space">JUMP</div>
-  </div>
-</div>
-
-<script>
-  const canvas = document.getElementById('canvas');
-  const buttons = document.querySelectorAll('.touch-btn');
-
-  function triggerKey(type, key, code) {
-    if (!canvas) return;
-    canvas.focus(); // Ensure Godot canvas has focus to receive keys
-    const event = new KeyboardEvent(type, {
-      key: key,
-      code: code,
-      bubbles: true,
-      cancelable: true
-    });
-    canvas.dispatchEvent(event);
-  }
-
-  buttons.forEach(btn => {
-    const key = btn.getAttribute('data-key');
-    const code = btn.getAttribute('data-code');
-
-    btn.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      triggerKey('keydown', key, code);
-    }, { passive: false });
-
-    btn.addEventListener('touchend', (e) => {
-      e.preventDefault();
-      triggerKey('keyup', key, code);
-    }, { passive: false });
-
-    btn.addEventListener('touchcancel', (e) => {
-      e.preventDefault();
-      triggerKey('keyup', key, code);
-    }, { passive: false });
-  });
-</script>
+		  <div class="dpad-grid">
+		    <div class="touch-btn btn-w" data-key="w" data-code="KeyW" data-keycode="87">W</div>
+		    <div class="touch-btn btn-a" data-key="a" data-code="KeyA" data-keycode="65">A</div>
+		    <div class="touch-btn btn-s" data-key="s" data-code="KeyS" data-keycode="83">S</div>
+		    <div class="touch-btn btn-d" data-key="d" data-code="KeyD" data-keycode="68">D</div>
+		  </div>
+		</div>
+		
+		<script>
+		  const canvas = document.getElementById('canvas');
+		  const buttons = document.querySelectorAll('.touch-btn');
+		
+		  function triggerKey(type, key, code, keyCode) {
+		    if (canvas) canvas.focus();
+		
+		    const event = new KeyboardEvent(type, {
+		      key: key,
+		      code: code,
+		      keyCode: keyCode,
+		      which: keyCode,
+		      bubbles: true,
+		      cancelable: true
+		    });
+		
+		    // Godot's web runtime listens at the window/document level
+		    window.dispatchEvent(event);
+		    document.dispatchEvent(event);
+		  }
+		
+		  buttons.forEach(btn => {
+		    const key = btn.getAttribute('data-key');
+		    const code = btn.getAttribute('data-code');
+		    const keyCode = parseInt(btn.getAttribute('data-keycode'), 10);
+		
+		    const press = (e) => {
+		      e.preventDefault();
+		      btn.classList.add('pressed');
+		      triggerKey('keydown', key, code, keyCode);
+		    };
+		
+		    const release = (e) => {
+		      e.preventDefault();
+		      btn.classList.remove('pressed');
+		      triggerKey('keyup', key, code, keyCode);
+		    };
+		
+		    btn.addEventListener('touchstart', press, { passive: false });
+		    btn.addEventListener('touchend', release, { passive: false });
+		    btn.addEventListener('touchcancel', release, { passive: false });
+		  });
+		</script>
 		<canvas id="canvas">
 			Your browser does not support the canvas tag.
 		</canvas>
