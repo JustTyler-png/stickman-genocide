@@ -147,24 +147,29 @@ body {
 		</div>
 		
 		<script>
-		  const canvas = document.getElementById('canvas');
 		  const buttons = document.querySelectorAll('.touch-btn');
 		
 		  function triggerKey(type, key, code, keyCode) {
+		    const canvas = document.getElementById('canvas');
 		    if (canvas) canvas.focus();
 		
 		    const event = new KeyboardEvent(type, {
 		      key: key,
 		      code: code,
-		      keyCode: keyCode,
-		      which: keyCode,
 		      bubbles: true,
-		      cancelable: true
+		      cancelable: true,
+		      composed: true,
+		      view: window
 		    });
 		
-		    // Godot's web runtime listens at the window/document level
-		    window.dispatchEvent(event);
+		    // Safari ignores keyCode/which in the constructor, so force them manually
+		    Object.defineProperty(event, 'keyCode', { get: () => keyCode });
+		    Object.defineProperty(event, 'which', { get: () => keyCode });
+		
+		    // Dispatch to document, window, and canvas for Safari + Godot compatibility
 		    document.dispatchEvent(event);
+		    window.dispatchEvent(event);
+		    if (canvas) canvas.dispatchEvent(event);
 		  }
 		
 		  buttons.forEach(btn => {
@@ -174,12 +179,14 @@ body {
 		
 		    const press = (e) => {
 		      e.preventDefault();
+		      e.stopPropagation();
 		      btn.classList.add('pressed');
 		      triggerKey('keydown', key, code, keyCode);
 		    };
 		
 		    const release = (e) => {
 		      e.preventDefault();
+		      e.stopPropagation();
 		      btn.classList.remove('pressed');
 		      triggerKey('keyup', key, code, keyCode);
 		    };
