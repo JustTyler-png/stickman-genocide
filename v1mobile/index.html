@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
+		<title>stickman-genocide</title>
+		<style>
+ #joystick-zone {
+    position: fixed;
+    bottom: 30px;
+    left: 30px;
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.15);
+    border: 2px solid rgba(255, 255, 255, 0.45);
+    z-index: 9999;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  #joystick-knob {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 56px;
+    height: 56px;
+    margin-left: -28px;
+    margin-top: -28px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.55);
+    border: 2px solid rgba(255, 255, 255, 0.85);
+    pointer-events: none;
+    transition: transform 0.05s ease-out;
+  }
+html, body, #canvas {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+body {
+	color: white;
+	background-color: black;
+	overflow: hidden;
+	touch-action: none;
+}
+
+#canvas {
+	display: block;
+}
+
+#canvas:focus {
+	outline: none;
+}
+
+#status, #status-splash, #status-progress {
+	position: absolute;
+	left: 0;
+	right: 0;
+}
+
+#status, #status-splash {
+	top: 0;
+	bottom: 0;
+}
+
+#status {
+	background-color: #242424;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	visibility: hidden;
+}
+
+#status-splash {
+	max-height: 100%;
+	max-width: 100%;
+	margin: auto;
+}
+
+#status-splash.show-image--false {
+	display: none;
+}
+
+#status-splash.fullsize--true {
+	height: 100%;
+	width: 100%;
+	object-fit: contain;
+}
+
+#status-splash.use-filter--false {
+	image-rendering: pixelated;
+}
+
+#status-progress, #status-notice {
+	display: none;
+}
+
+#status-progress {
+	bottom: 10%;
+	width: 50%;
+	margin: 0 auto;
+}
+
+#status-notice {
+	background-color: #5b3943;
+	border-radius: 0.5rem;
+	border: 1px solid #9b3943;
+	color: #e0e0e0;
+	font-family: 'Noto Sans', 'Droid Sans', Arial, sans-serif;
+	line-height: 1.3;
+	margin: 0 2rem;
+	overflow: hidden;
+	padding: 1rem;
+	text-align: center;
+	z-index: 1;
+}
+		</style>
+		<link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
+<link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
+		<div id="joystick-zone">
+		  <div id="joystick-knob"></div>
+		</div>
+		<script>
+		  const zone = document.getElementById('joystick-zone');
+		  const knob = document.getElementById('joystick-knob');
+		
+		  const KEYS = {
+		    w: { key: 'w', code: 'KeyW', keyCode: 87, pressed: false },
+		    a: { key: 'a', code: 'KeyA', keyCode: 65, pressed: false },
+		    s: { key: 's', code: 'KeyS', keyCode: 83, pressed: false },
+		    d: { key: 'd', code: 'KeyD', keyCode: 68, pressed: false }
+		  };
+		
+		  let activeTouchId = null;
+		  const maxRadius = 45; // Max pixels the knob can move from center
+		  const deadzone = 14;  // Minimum drag before triggering movement
+		
+		  function sendKey(type, k) {
+		    const canvas = document.getElementById('canvas');
+		    if (canvas) canvas.focus();
+		
+		    const event = new KeyboardEvent(type, {
+		      key: k.key,
+		      code: k.code,
+		      bubbles: true,
+		      cancelable: true,
+		      composed: true,
+		      view: window
+		    });
+		
+		    Object.defineProperty(event, 'keyCode', { get: () => k.keyCode });
+		    Object.defineProperty(event, 'which', { get: () => k.keyCode });
+		
+		    document.dispatchEvent(event);
+		    window.dispatchEvent(event);
+		    if (canvas) canvas.dispatchEvent(event);
+		  }
+		
+		  function setKeyState(letter, shouldPress) {
+		    const k = KEYS[letter];
+		    if (k.pressed !== shouldPress) {
+		      k.pressed = shouldPress;
+		      sendKey(shouldPress ? 'keydown' : 'keyup', k);
+		    }
+		  }
+		
+		  function updateJoystick(clientX, clientY) {
+		    const rect = zone.getBoundingClientRect();
+		    const centerX = rect.left + rect.width / 2;
+		    const centerY = rect.top + rect.height / 2;
+		
+		    let dx = clientX - centerX;
+		    let dy = clientY - centerY;
+		    const distance = Math.hypot(dx, dy);
+		
+		    // Clamp visual knob inside the outer ring
+		    if (distance > maxRadius) {
+		      const angle = Math.atan2(dy, dx);
+		      dx = Math.cos(angle) * maxRadius;
+		      dy = Math.sin(angle) * maxRadius;
+		    }
+		
+		    knob.style.transform = `translate(${dx}px, ${dy}px)`;
+		
+		    // Trigger WASD combinations (allows diagonals automatically)
+		    setKeyState('w', dy < -deadzone);
+		    setKeyState('s', dy > deadzone);
+		    setKeyState('a', dx < -deadzone);
+		    setKeyState('d', dx > deadzone);
+		  }
+		
+		  function resetJoystick() {
+		    activeTouchId = null;
+		    knob.style.transform = 'translate(0px, 0px)';
+		    setKeyState('w', false);
+		    setKeyState('a', false);
+		    setKeyState('s', false);
+		    setKeyState('d', false);
+		  }
+		
+		  zone.addEventListener('touchstart', (e) => {
+		    e.preventDefault();
+		    e.stopPropagation();
+		    if (activeTouchId !== null) return;
+		    const touch = e.changedTouches[0];
+		    activeTouchId = touch.identifier;
+		    updateJoystick(touch.clientX, touch.clientY);
+		  }, { passive: false });
+		
+		  zone.addEventListener('touchmove', (e) => {
+		    e.preventDefault();
+		    e.stopPropagation();
+		    for (let i = 0; i < e.changedTouches.length; i++) {
+		      const touch = e.changedTouches[i];
+		      if (touch.identifier === activeTouchId) {
+		        updateJoystick(touch.clientX, touch.clientY);
+		        break;
+		      }
+		    }
+		  }, { passive: false });
+		
+		  const handleEnd = (e) => {
+		    e.preventDefault();
+		    e.stopPropagation();
+		    for (let i = 0; i < e.changedTouches.length; i++) {
+		      if (e.changedTouches[i].identifier === activeTouchId) {
+		        resetJoystick();
+		        break;
+		      }
+		    }
+		  };
+		
+		  zone.addEventListener('touchend', handleEnd, { passive: false });
+		  zone.addEventListener('touchcancel', handleEnd, { passive: false });
+		</script>
+		<canvas id="canvas">
+			Your browser does not support the canvas tag.
+		</canvas>
+
+		<noscript>
+			Your browser does not support JavaScript.
+		</noscript>
+
+		<div id="status">
+			<img id="status-splash" class="show-image--true fullsize--true use-filter--true" src="index.png" alt="">
+			<progress id="status-progress"></progress>
+			<div id="status-notice"></div>
+		</div>
+
+		<script src="index.js"></script>
+		<script>
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":316536,"index.wasm":37902138},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
+const GODOT_THREADS_ENABLED = false;
+const engine = new Engine(GODOT_CONFIG);
+
+(function () {
+	const statusOverlay = document.getElementById('status');
+	const statusProgress = document.getElementById('status-progress');
+	const statusNotice = document.getElementById('status-notice');
+
+	let initializing = true;
+	let statusMode = '';
+
+	function setStatusMode(mode) {
+		if (statusMode === mode || !initializing) {
+			return;
+		}
+		if (mode === 'hidden') {
+			statusOverlay.remove();
+			initializing = false;
+			return;
+		}
+		statusOverlay.style.visibility = 'visible';
+		statusProgress.style.display = mode === 'progress' ? 'block' : 'none';
+		statusNotice.style.display = mode === 'notice' ? 'block' : 'none';
+		statusMode = mode;
+	}
+
+	function setStatusNotice(text) {
+		while (statusNotice.lastChild) {
+			statusNotice.removeChild(statusNotice.lastChild);
+		}
+		const lines = text.split('\n');
+		lines.forEach((line) => {
+			statusNotice.appendChild(document.createTextNode(line));
+			statusNotice.appendChild(document.createElement('br'));
+		});
+	}
+
+	function displayFailureNotice(err) {
+		console.error(err);
+		if (err instanceof Error) {
+			setStatusNotice(err.message);
+		} else if (typeof err === 'string') {
+			setStatusNotice(err);
+		} else {
+			setStatusNotice('An unknown error occurred.');
+		}
+		setStatusMode('notice');
+		initializing = false;
+	}
+
+	const missing = Engine.getMissingFeatures({
+		threads: GODOT_THREADS_ENABLED,
+	});
+
+	if (missing.length !== 0) {
+		if (GODOT_CONFIG['serviceWorker'] && GODOT_CONFIG['ensureCrossOriginIsolationHeaders'] && 'serviceWorker' in navigator) {
+			let serviceWorkerRegistrationPromise;
+			try {
+				serviceWorkerRegistrationPromise = navigator.serviceWorker.getRegistration();
+			} catch (err) {
+				serviceWorkerRegistrationPromise = Promise.reject(new Error('Service worker registration failed.'));
+			}
+			// There's a chance that installing the service worker would fix the issue
+			Promise.race([
+				serviceWorkerRegistrationPromise.then((registration) => {
+					if (registration != null) {
+						return Promise.reject(new Error('Service worker already exists.'));
+					}
+					return registration;
+				}).then(() => engine.installServiceWorker()),
+				// For some reason, `getRegistration()` can stall
+				new Promise((resolve) => {
+					setTimeout(() => resolve(), 2000);
+				}),
+			]).then(() => {
+				// Reload if there was no error.
+				window.location.reload();
+			}).catch((err) => {
+				console.error('Error while registering service worker:', err);
+			});
+		} else {
+			// Display the message as usual
+			const missingMsg = 'Error\nThe following features required to run Godot projects on the Web are missing:\n';
+			displayFailureNotice(missingMsg + missing.join('\n'));
+		}
+	} else {
+		setStatusMode('progress');
+		engine.startGame({
+			'onProgress': function (current, total) {
+				if (current > 0 && total > 0) {
+					statusProgress.value = current;
+					statusProgress.max = total;
+				} else {
+					statusProgress.removeAttribute('value');
+					statusProgress.removeAttribute('max');
+				}
+			},
+		}).then(() => {
+			setStatusMode('hidden');
+		}, displayFailureNotice);
+	}
+}());
+		</script>
+	</body>
+</html>
+
